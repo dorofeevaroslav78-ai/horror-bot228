@@ -1,0 +1,514 @@
+// ====================================================================
+// ██████╗ ██╗   ██╗███████╗██╗  ██╗███████╗██████╗ ██████╗ ██████╗ ████████╗
+// ██╔══██╗██║   ██║██╔════╝██║  ██║██╔════╝██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝
+// ██████╔╝██║   ██║███████╗███████║█████╗  ██████╔╝██████╔╝██████╔╝   ██║   
+// ██╔══██╗██║   ██║╚════██║██╔══██║██╔══╝  ██╔══██╗██╔══██╗██╔══██╗   ██║   
+// ██║  ██║╚██████╔╝███████║██║  ██║███████╗██║  ██║██║  ██║██║  ██║   ██║   
+// ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
+// ====================================================================
+//                  ПОЛНЫЙ ХОРРОР-БОТ ДЛЯ MINECRAFT
+//         ВСЕ ТРОЙКИ | СИСТЕМА ДНЕЙ | АНГЕЛЫ | ФИНАЛ
+// ====================================================================
+
+const mineflayer = require('mineflayer');
+const vec3 = require('vec3');
+
+// ====================================================================
+// 📋 ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ
+// ====================================================================
+
+const CONFIG = {
+    // Подключение к серверу
+    host: "xyi228.aternos.me",
+    port: 37083,
+    version: "1.20.4",
+    auth: "offline",
+    username: "§4§lHorrorBot",
+    
+    // Система дней
+    dayCount: 1,
+    
+    // Состояние психики игроков
+    playerSanity: new Map(),
+    playerDimension: new Map(),
+    
+    // Статус троек
+    firstTrio: { active: true, defeated: false, insanityTriggered: false, bosses: { lucas: false, herobrine: false, malfezar: false } },
+    secondTrio: { active: false, defeated: false, insanityTriggered: false, bosses: { ignis: false, terra: false, aeros: false } },
+    thirdTrio: { active: false, defeated: false, insanityTriggered: false, bosses: { necros: false, nocturn: false, kneller: false } },
+    fourthTrio: { active: false, defeated: false, insanityTriggered: false, bosses: { marshal: false, inquisitor: false, guardian: false } },
+    voidKing: { active: false, defeated: false, insanityTriggered: false },
+    
+    // Ангелы
+    ronegod: { summoned: false, alive: false, coordinates: null },
+    leshangel: { summoned: false, alive: false, sacrificeUsed: false },
+    timurangel: { summoned: false, alive: false },
+    
+    // Флаги событий
+    spellCoordinates: null,
+    spellGuardianDefeated: false,
+    worldDestruction: 0,
+    maxDestruction: 50
+};
+
+// ====================================================================
+// 🤖 ОСНОВНОЙ БОТ
+// ====================================================================
+
+let bot = null;
+let targetPlayer = null;
+
+function createBot() {
+    bot = mineflayer.createBot({
+        host: CONFIG.host,
+        port: CONFIG.port,
+        username: CONFIG.username,
+        version: CONFIG.version,
+        auth: CONFIG.auth
+    });
+    
+    bot.once('spawn', () => {
+        console.log('§4§l╔═══════════════════════════════════════════════════╗');
+        console.log('§4§l║     👻 ХОРРОР-БОТ АКТИВИРОВАН! 👻               ║');
+        console.log('§4§l║     🎮 ВСЕ ТРОЙКИ | АНГЕЛЫ | ФИНАЛ            ║');
+        console.log('§4§l╚═══════════════════════════════════════════════════╝');
+        
+        startDaySystem();
+        setupCommands();
+        setupAngelCommands();
+        
+        // Приветствие
+        bot.chat('§4§l👻 ХОРРОР-БОТ АКТИВИРОВАН! 👻');
+        bot.chat('§6§l📜 В МИРЕ ПОЯВИЛАСЬ ПЕРВАЯ ТРОЙКА: ЛУКАС, ХЕРОБРИН, МАЛФЕЗАР');
+        bot.chat('§6§l⚔️ УБЕЙТЕ ИХ, ЧТОБЫ ПРИЗВАТЬ СЛЕДУЮЩИХ!');
+        bot.chat('§6§l⏰ ЕСЛИ НЕ УСПЕТЕ - ОНИ СОЙДУТ С УМА!');
+        
+        // Спавн первой тройки
+        spawnFirstTrio();
+    });
+    
+    bot.on('playerJoined', (player) => {
+        if (player.username !== bot.username && !targetPlayer) {
+            targetPlayer = player;
+            CONFIG.playerSanity.set(player.username, 100);
+            bot.chat(`§4§l👁️ НОВАЯ ЖЕРТВА: ${player.username} | ПСИХИКА: 100%`);
+        }
+    });
+    
+    bot.on('end', () => {
+        console.log('❌ Бот отключён, переподключение через 5 секунд...');
+        setTimeout(createBot, 5000);
+    });
+    
+    bot.on('error', (err) => console.error('Ошибка:', err.message));
+}
+
+// ====================================================================
+// 🕐 СИСТЕМА ДНЕЙ
+// ====================================================================
+
+function startDaySystem() {
+    setInterval(() => {
+        CONFIG.dayCount++;
+        bot.chat(`§6§l📅 НАСТУПИЛ ДЕНЬ ${CONFIG.dayCount} 📅`);
+        
+        // Проверка безумия
+        checkInsanity();
+        
+        // Предупреждения
+        sendDayWarnings();
+        
+    }, 20 * 60 * 1000);
+}
+
+function checkInsanity() {
+    // Первая тройка - безумие на 100 день
+    if (CONFIG.firstTrio.active && !CONFIG.firstTrio.defeated && !CONFIG.firstTrio.insanityTriggered && CONFIG.dayCount >= 100) {
+        CONFIG.firstTrio.insanityTriggered = true;
+        firstTrioInsanity();
+    }
+    
+    // Вторая тройка - безумие на 200 день
+    if (CONFIG.secondTrio.active && !CONFIG.secondTrio.defeated && !CONFIG.secondTrio.insanityTriggered && CONFIG.dayCount >= 200) {
+        CONFIG.secondTrio.insanityTriggered = true;
+        secondTrioInsanity();
+    }
+    
+    // Третья тройка - безумие на 300 день
+    if (CONFIG.thirdTrio.active && !CONFIG.thirdTrio.defeated && !CONFIG.thirdTrio.insanityTriggered && CONFIG.dayCount >= 300) {
+        CONFIG.thirdTrio.insanityTriggered = true;
+        thirdTrioInsanity();
+    }
+    
+    // Четвёртая тройка - безумие на 400 день
+    if (CONFIG.fourthTrio.active && !CONFIG.fourthTrio.defeated && !CONFIG.fourthTrio.insanityTriggered && CONFIG.dayCount >= 400) {
+        CONFIG.fourthTrio.insanityTriggered = true;
+        fourthTrioInsanity();
+    }
+    
+    // Король Пустоты - безумие на 500 день
+    if (CONFIG.voidKing.active && !CONFIG.voidKing.defeated && !CONFIG.voidKing.insanityTriggered && CONFIG.dayCount >= 500) {
+        CONFIG.voidKing.insanityTriggered = true;
+        voidKingInsanity();
+    }
+}
+
+function sendDayWarnings() {
+    if (CONFIG.dayCount === 99 && CONFIG.firstTrio.active && !CONFIG.firstTrio.defeated) {
+        bot.chat(`§4§l⚠️ ЗАВТРА 100 ДЕНЬ! ПЕРВАЯ ТРОЙКА СОЙДЁТ С УМА! ⚠️`);
+    }
+    if (CONFIG.dayCount === 199 && CONFIG.secondTrio.active && !CONFIG.secondTrio.defeated) {
+        bot.chat(`§4§l⚠️ ЗАВТРА 200 ДЕНЬ! ВТОРАЯ ТРОЙКА СОЙДЁТ С УМА! ⚠️`);
+    }
+    if (CONFIG.dayCount === 299 && CONFIG.thirdTrio.active && !CONFIG.thirdTrio.defeated) {
+        bot.chat(`§4§l⚠️ ЗАВТРА 300 ДЕНЬ! ТРЕТЬЯ ТРОЙКА СОЙДЁТ С УМА! ⚠️`);
+    }
+    if (CONFIG.dayCount === 399 && CONFIG.fourthTrio.active && !CONFIG.fourthTrio.defeated) {
+        bot.chat(`§4§l⚠️ ЗАВТРА 400 ДЕНЬ! ЧЕТВЁРТАЯ ТРОЙКА СОЙДЁТ С УМА! ⚠️`);
+    }
+    if (CONFIG.dayCount === 499 && CONFIG.voidKing.active && !CONFIG.voidKing.defeated) {
+        bot.chat(`§4§l⚠️ ЗАВТРА 500 ДЕНЬ! КОРОЛЬ ПУСТОТЫ СОЙДЁТ С УМА! ⚠️`);
+    }
+}
+
+// ====================================================================
+// 😡 БЕЗУМИЕ ТРОЕК
+// ====================================================================
+
+function firstTrioInsanity() {
+    bot.chat(`§4§l╔═══════════════════════════════════════════════════╗`);
+    bot.chat(`§4§l║   💀 100 ДЕНЬ: ПЕРВАЯ ТРОЙКА СОШЛА С УМА! 💀   ║`);
+    bot.chat(`§4§l║   😈 ЛУКАС | ХЕРОБРИН | МАЛФЕЗАР 😈           ║`);
+    bot.chat(`§4§l╚═══════════════════════════════════════════════════╝`);
+    
+    bot.chat(`/effect @e[name=Лукас] strength 99999 3`);
+    bot.chat(`/effect @e[name=Херобрин] speed 99999 3`);
+    bot.chat(`/effect @e[name=Малфезар] resistance 99999 3`);
+    
+    setInterval(() => {
+        if (CONFIG.firstTrio.active && !CONFIG.firstTrio.defeated) {
+            bot.chat(`§4§lЛУКАС: МИР СХОДИТ С УМА!`);
+            bot.chat(`/effect @a nausea 15 2`);
+        }
+    }, 30000);
+}
+
+function secondTrioInsanity() {
+    bot.chat(`§c§l╔═══════════════════════════════════════════════════╗`);
+    bot.chat(`§c§l║   💀 200 ДЕНЬ: ВТОРАЯ ТРОЙКА СОШЛА С УМА! 💀   ║`);
+    bot.chat(`§c§l║   🔥 ИГНИС | ТЕРРА | АЭРОС 🔥                 ║`);
+    bot.chat(`§c§l╚═══════════════════════════════════════════════════╝`);
+    
+    bot.chat(`/effect @e[name=Игнис] strength 99999 4`);
+    bot.chat(`/effect @e[name=Терра] resistance 99999 4`);
+    bot.chat(`/effect @e[name=Аэрос] speed 99999 4`);
+}
+
+function thirdTrioInsanity() {
+    bot.chat(`§5§l╔═══════════════════════════════════════════════════╗`);
+    bot.chat(`§5§l║   💀 300 ДЕНЬ: ТРЕТЬЯ ТРОЙКА СОШЛА С УМА! 💀   ║`);
+    bot.chat(`§5§l║   💀 НЕКРОС | НОКТУРН | КНЕЛЛЕР 💀            ║`);
+    bot.chat(`§5§l╚═══════════════════════════════════════════════════╝`);
+    
+    bot.chat(`/effect @e[name=Некрос] strength 99999 5`);
+    bot.chat(`/effect @e[name=Ноктурн] resistance 99999 5`);
+    bot.chat(`/effect @e[name=Кнеллер] speed 99999 5`);
+}
+
+function fourthTrioInsanity() {
+    bot.chat(`§0§l╔═══════════════════════════════════════════════════╗`);
+    bot.chat(`§0§l║   💀 400 ДЕНЬ: ЧЕТВЁРТАЯ ТРОЙКА СОШЛА С УМА! 💀 ║`);
+    bot.chat(`§0§l║   ⚔️ МАРШАЛ | ИНКВИЗИТОР | СТРАЖ ⚔️            ║`);
+    bot.chat(`§0§l╚═══════════════════════════════════════════════════╝`);
+    
+    bot.chat(`/effect @e[name=Маршал] strength 99999 6`);
+    bot.chat(`/effect @e[name=Инквизитор] resistance 99999 6`);
+    bot.chat(`/effect @e[name=Страж] speed 99999 6`);
+}
+
+function voidKingInsanity() {
+    bot.chat(`§8§l╔═══════════════════════════════════════════════════╗`);
+    bot.chat(`§8§l║   💀 500 ДЕНЬ: КОРОЛЬ ПУСТОТЫ СОШЁЛ С УМА! 💀   ║`);
+    bot.chat(`§8§l║   👑 НАЧИНАЕТСЯ УНИЧТОЖЕНИЕ МИРА! 👑            ║`);
+    bot.chat(`§8§l╚═══════════════════════════════════════════════════╝`);
+    
+    startWorldDestruction();
+}
+
+// ====================================================================
+// 🌍 УНИЧТОЖЕНИЕ МИРА
+// ====================================================================
+
+function startWorldDestruction() {
+    bot.chat(`§0§l▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`);
+    bot.chat(`§0§l💀 КОРОЛЬ ПУСТОТЫ УНИЧТОЖАЕТ СВИТОК! 💀`);
+    bot.chat(`§0§l▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`);
+    
+    // Уничтожение координат свитка
+    if (CONFIG.spellCoordinates) {
+        const { x, y, z } = CONFIG.spellCoordinates;
+        bot.chat(`/setblock ${x} ${y} ${z} air`);
+    }
+    
+    bot.chat(`§4§lКОРОЛЬ ПУСТОТЫ: СВИТОК УНИЧТОЖЕН! ХА-ХА-ХА!`);
+    bot.chat(`§4§lКОРОЛЬ ПУСТОТЫ: ТЕПЕРЬ Я УНИЧТОЖУ ЭТОТ МИР!`);
+    
+    // Разрушение чанков
+    const destructionInterval = setInterval(() => {
+        if (CONFIG.worldDestruction >= CONFIG.maxDestruction) {
+            clearInterval(destructionInterval);
+            activateSoulWhistle();
+            return;
+        }
+        
+        CONFIG.worldDestruction++;
+        const progress = (CONFIG.worldDestruction / CONFIG.maxDestruction) * 100;
+        const chunkX = Math.floor(Math.random() * 200) - 100;
+        const chunkZ = Math.floor(Math.random() * 200) - 100;
+        
+        bot.chat(`§4§l💥 КОРОЛЬ ПУСТОТЫ УНИЧТОЖАЕТ ЧАНК ${chunkX}, ${chunkZ}!`);
+        bot.chat(`§4§l🌍 РАЗРУШЕНИЕ МИРА: ${Math.floor(progress)}%`);
+        
+        bot.chat(`/fill ${chunkX*16} 0 ${chunkZ*16} ${chunkX*16+15} 256 ${chunkZ*16+15} air`);
+        bot.chat(`/particle explosion ~ ~2 ~ 10 10 10 0.1 150`);
+        bot.chat(`/playsound entity.generic.explode master @a ~ ~ ~ 1 0.7`);
+        
+        if (CONFIG.worldDestruction === 25) {
+            bot.chat(`§6§l⚠️ МИР РАЗРУШЕН НА 50%! СВИСТОК ДУШИ АКТИВИРОВАН! ⚠️`);
+            bot.chat(`§e§l[НАПИШИТЕ В ЧАТ: "СИЛОЙ ВЕЧНОСТИ, ПРИЗЫВАЮ ДУШИ ГЕРОЕВ!" ЧТОБЫ ПРИЗВАТЬ ПОМОЩЬ]`);
+        }
+        
+    }, 5000);
+}
+
+// ====================================================================
+// 🎵 АКТИВАЦИЯ СВИСТКА ДУШИ
+// ====================================================================
+
+function activateSoulWhistle() {
+    const playerName = targetPlayer?.username;
+    if (!playerName) return;
+    
+    bot.on('chat', function onSpellCast(username, message) {
+        if (username === playerName && message === "СИЛОЙ ВЕЧНОСТИ, ПРИЗЫВАЮ ДУШИ ГЕРОЕВ!") {
+            bot.removeListener('chat', onSpellCast);
+            teleportToVoidKingdom(playerName);
+        }
+    });
+    
+    setTimeout(() => {
+        bot.removeListener('chat', onSpellCast);
+        bot.chat(`§4§lКОРОЛЬ ПУСТОТЫ: ВЫ НЕ ОСМЕЛИЛИСЬ! МИР ПОГИБНЕТ!`);
+        badEnding();
+    }, 60000);
+}
+
+// ====================================================================
+// 👑 ТЕЛЕПОРТ В ЦАРСТВО КОРОЛЯ ПУСТОТЫ
+// ====================================================================
+
+function teleportToVoidKingdom(playerName) {
+    bot.chat(`§6§l═══════════════════════════════════════════════════════`);
+    bot.chat(`§6§l✨ ВЫ ПРОИЗНОСИТЕ ЗАКЛИНАНИЕ! ДУШИ ГЕРОЕВ ПРИХОДЯТ! ✨`);
+    bot.chat(`§6§l═══════════════════════════════════════════════════════`);
+    
+    bot.chat(`/particle portal ~ ~2 ~ 20 15 20 0.3 300`);
+    bot.chat(`/playsound block.end_portal.spawn master ${playerName} ~ ~ ~ 1 1`);
+    bot.chat(`/execute in void_kingdom run tp ${playerName} 0 50 0`);
+    
+    setTimeout(() => {
+        bot.chat(`§0§l▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`);
+        bot.chat(`§0§l👑 ТЫ В ЦАРСТВЕ КОРОЛЯ ПУСТОТЫ! 👑`);
+        bot.chat(`§0§l▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`);
+        
+        summonHeroSpirits(playerName);
+    }, 2000);
+}
+
+// ====================================================================
+// ✨ ПРИЗЫВ ДУХОВ ГЕРОЕВ
+// ====================================================================
+
+function summonHeroSpirits(playerName) {
+    bot.chat(`§a§l═══════════════════════════════════════════════════════`);
+    bot.chat(`§a§l✨ ДУШИ RONEGOD, LESHANGEL И TIMURANGEL ПРИХОДЯТ! ✨`);
+    bot.chat(`§a§l═══════════════════════════════════════════════════════`);
+    
+    bot.chat(`/summon wolf -5 52 -5 {CustomName:'{"text":"§6§lДУША RONEGOD","bold":true}', CustomNameVisible:1}`);
+    bot.chat(`§6§lRONEGOD: МЫ УСЛЫШАЛИ ТВОЙ ЗОВ!`);
+    
+    setTimeout(() => {
+        bot.chat(`/summon wolf 5 52 -5 {CustomName:'{"text":"§a§lДУША LESHANGEL","bold":true}', CustomNameVisible:1}`);
+        bot.chat(`§a§lLESHANGEL: МЫ ЗНАЛИ, ЧТО ТЫ ПРИЗОВЁШЬ НАС!`);
+    }, 1000);
+    
+    setTimeout(() => {
+        bot.chat(`/summon wolf 0 52 5 {CustomName:'{"text":"§b§lДУША TIMURANGEL","bold":true}', CustomNameVisible:1}`);
+        bot.chat(`§b§lTIMURANGEL: ВРЕМЯ ПОКАРАТЬ КОРОЛЯ ПУСТОТЫ!`);
+    }, 2000);
+    
+    setTimeout(() => {
+        finalBattle(playerName);
+    }, 3000);
+}
+
+// ====================================================================
+// ⚔️ ФИНАЛЬНАЯ БИТВА
+// ====================================================================
+
+function finalBattle(playerName) {
+    bot.chat(`§4§lКОРОЛЬ ПУСТОТЫ: ЧТО?! ДУШИ УМЕРШИХ ГЕРОЕВ?!`);
+    
+    setTimeout(() => {
+        bot.chat(`§6§lRONEGOD: СИЛОЙ СВЕТА, ПОВЕРГАЮ ТЕБЯ!`);
+        bot.chat(`/summon lightning_bolt -5 52 -5`);
+        bot.chat(`/damage @e[name=КОРОЛЬ] 500`);
+    }, 1000);
+    
+    setTimeout(() => {
+        bot.chat(`§a§lLESHANGEL: ПРИРОДА МСТИТ ЗА УНИЧТОЖЕННЫЕ ЛЕСА!`);
+        bot.chat(`/summon lightning_bolt 5 52 -5`);
+        bot.chat(`/damage @e[name=КОРОЛЬ] 500`);
+    }, 2000);
+    
+    setTimeout(() => {
+        bot.chat(`§b§lTIMURANGEL: ВРЕМЯ ОСТАНОВИТЬСЯ ДЛЯ ТЕБЯ!`);
+        bot.chat(`/summon lightning_bolt 0 52 5`);
+        bot.chat(`/damage @e[name=КОРОЛЬ] 500`);
+    }, 3000);
+    
+    setTimeout(() => {
+        bot.chat(`§0§l▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`);
+        bot.chat(`§4§lКОРОЛЬ ПУСТОТЫ: НЕЕЕТ! ЭТО НЕВОЗМОЖНО!`);
+        bot.chat(`§4§lКОРОЛЬ ПУСТОТЫ: ТРИ ДУШИ... ПОБЕДИЛИ МЕНЯ...`);
+        bot.chat(`§0§l▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓`);
+        
+        bot.chat(`/kill @e[name=КОРОЛЬ]`);
+        bot.chat(`/particle campfire_cosy_smoke 0 50 0 20 15 20 0.2 300`);
+        bot.chat(`/playsound entity.ender_dragon.death master ${playerName} ~ ~ ~ 1 1`);
+        
+        trueEnding(playerName);
+    }, 4000);
+}
+
+// ====================================================================
+// 🌟 КОНЦОВКИ
+// ====================================================================
+
+function trueEnding(playerName) {
+    bot.chat(`§6§l╔═══════════════════════════════════════════════════╗`);
+    bot.chat(`§6§l║   ✨✨✨ ИСТИННАЯ КОНЦОВКА ДОСТИГНУТА! ✨✨✨   ║`);
+    bot.chat(`§6§l║   🌟 ТЫ СПАС МИР ОТ КОРОЛЯ ПУСТОТЫ! 🌟          ║`);
+    bot.chat(`§6§l║   🙏 АНГЕЛЫ ОТДАЛИ СВОИ ЖИЗНИ РАДИ ТЕБЯ! 🙏    ║`);
+    bot.chat(`§6§l║   🏆 ТЫ СТАЛ ЛЕГЕНДОЙ ЭТОГО МИРА! 🏆            ║`);
+    bot.chat(`§6§l╚═══════════════════════════════════════════════════╝`);
+    
+    bot.chat(`/give ${playerName} netherite_sword{display:{Name:'{"text":"Меч Правосудия","color":"gold"}'},Enchantments:[{id:sharpness,lvl:10}]} 1`);
+    bot.chat(`/effect ${playerName} health_boost 99999 10`);
+    bot.chat(`/particle heart ~ ~2 ~ 30 20 30 0.1 300`);
+    
+    setTimeout(() => {
+        bot.end();
+        process.exit();
+    }, 10000);
+}
+
+function badEnding() {
+    bot.chat(`§4§l╔═══════════════════════════════════════════════════╗`);
+    bot.chat(`§4§l║   💀 ПЛОХАЯ КОНЦОВКА: МИР УНИЧТОЖЕН! 💀        ║`);
+    bot.chat(`§4§l║   👑 КОРОЛЬ ПУСТОТЫ ПОБЕДИЛ... 👑               ║`);
+    bot.chat(`§4§l╚═══════════════════════════════════════════════════╝`);
+    
+    setTimeout(() => {
+        bot.end();
+        process.exit();
+    }, 5000);
+}
+
+// ====================================================================
+// 🎮 СПАВН ТРОЕК
+// ====================================================================
+
+function spawnFirstTrio() {
+    bot.chat(`/summon zombie 0 64 0 {CustomName:'{"text":"§4§lЛУКАС","bold":true}', CustomNameVisible:1, Health:400}`);
+    bot.chat(`/summon skeleton 5 64 0 {CustomName:'{"text":"§2§lХЕРОБРИН","bold":true}', CustomNameVisible:1, Health:400}`);
+    bot.chat(`/summon warden -5 64 0 {CustomName:'{"text":"§5§lМАЛФЕЗАР","bold":true}', CustomNameVisible:1, Health:500}`);
+    bot.chat(`§4§lПЕРВАЯ ТРОЙКА ПОЯВИЛАСЬ! УБЕЙТЕ ИХ!`);
+}
+
+function spawnSecondTrio() {
+    bot.chat(`/summon blaze 0 64 0 {CustomName:'{"text":"§c§lИГНИС","bold":true}', CustomNameVisible:1, Health:800}`);
+    bot.chat(`/summon iron_golem 10 64 0 {CustomName:'{"text":"§2§lТЕРРА","bold":true}', CustomNameVisible:1, Health:900}`);
+    bot.chat(`/summon phantom -10 70 0 {CustomName:'{"text":"§f§lАЭРОС","bold":true}', CustomNameVisible:1, Health:700}`);
+    bot.chat(`§c§lВТОРАЯ ТРОЙКА ПОЯВИЛАСЬ! УБЕЙТЕ ИХ!`);
+}
+
+function spawnThirdTrio() {
+    bot.chat(`/summon wither_skeleton 0 64 0 {CustomName:'{"text":"§8§lНЕКРОС","bold":true}', CustomNameVisible:1, Health:950}`);
+    bot.chat(`/summon ender_dragon 15 64 0 {CustomName:'{"text":"§0§lНОКТУРН","bold":true}', CustomNameVisible:1, Health:1100}`);
+    bot.chat(`/summon warden -15 64 0 {CustomName:'{"text":"§1§lКНЕЛЛЕР","bold":true}', CustomNameVisible:1, Health:1300}`);
+    bot.chat(`§5§lТРЕТЬЯ ТРОЙКА ПОЯВИЛАСЬ! УБЕЙТЕ ИХ!`);
+}
+
+function spawnFourthTrio() {
+    bot.chat(`/summon vindicator 0 64 0 {CustomName:'{"text":"§8§lМАРШАЛ ПУСТОТЫ","bold":true}', CustomNameVisible:1, Health:600}`);
+    bot.chat(`/summon evoker 10 64 0 {CustomName:'{"text":"§5§lВЕЛИКИЙ ИНКВИЗИТОР","bold":true}', CustomNameVisible:1, Health:550}`);
+    bot.chat(`/summon warden -10 64 0 {CustomName:'{"text":"§1§lСТРАЖ БЕЗДНЫ","bold":true}', CustomNameVisible:1, Health:800}`);
+    bot.chat(`§0§lЧЕТВЁРТАЯ ТРОЙКА ПОЯВИЛАСЬ! УБЕЙТЕ ИХ!`);
+}
+
+function spawnVoidKing() {
+    bot.chat(`/summon ender_dragon 0 64 0 {CustomName:'{"text":"§0§lКОРОЛЬ ПУСТОТЫ","bold":true}', CustomNameVisible:1, Health:5000}`);
+    bot.chat(`§8§lКОРОЛЬ ПУСТОТЫ ПОЯВИЛСЯ! ЭТО ФИНАЛЬНАЯ БИТВА!`);
+    
+    // Генерация свитка
+    const x = Math.floor(Math.random() * 400) - 200;
+    const z = Math.floor(Math.random() * 400) - 200;
+    CONFIG.spellCoordinates = { x, y: 64, z };
+    
+    bot.chat(`/setblock ${x} 64 ${z} chest{Items:[{id:"written_book",Count:1,tag:{pages:['["СВИТОК ВЕЧНОСТИ\\n\\nОТКРЫВАЮСЬ ПО ВЕЛЕНИЮ ВРЕМЕНИ\\nЗАКРЫВАЮСЬ ПО ВЕЛЕНИЮ ПРОСТРАНСТВА\\nСИЛОЙ ВЕЧНОСТИ, ПОВЕРГАЮ ТЬМУ В ПРАХ!"]'],title:"СВИТОК ВЕЧНОСТИ",author:"Timurangel"}}]}`);
+    bot.chat(`§6§l📜 СВИТОК ПОЯВИЛСЯ НА КООРДИНАТАХ: X=${x}, Z=${z} 📜`);
+}
+
+// ====================================================================
+// 🔄 АКТИВАЦИЯ СЛЕДУЮЩЕЙ ТРОЙКИ
+// ====================================================================
+
+function checkAndActivateNextTrio() {
+    if (CONFIG.firstTrio.defeated && !CONFIG.secondTrio.active && !CONFIG.secondTrio.defeated) {
+        CONFIG.secondTrio.active = true;
+        spawnSecondTrio();
+        return;
+    }
+    
+    if (CONFIG.secondTrio.defeated && !CONFIG.thirdTrio.active && !CONFIG.thirdTrio.defeated) {
+        CONFIG.thirdTrio.active = true;
+        spawnThirdTrio();
+        return;
+    }
+    
+    if (CONFIG.thirdTrio.defeated && !CONFIG.fourthTrio.active && !CONFIG.fourthTrio.defeated) {
+        CONFIG.fourthTrio.active = true;
+        spawnFourthTrio();
+        return;
+    }
+    
+    if (CONFIG.fourthTrio.defeated && !CONFIG.voidKing.active && !CONFIG.voidKing.defeated) {
+        CONFIG.voidKing.active = true;
+        spawnVoidKing();
+        return;
+    }
+}
+
+// ====================================================================
+// 📜 КОМАНДЫ ДЛЯ ИГРОКОВ
+// ====================================================================
+
+function setupCommands() {
+    bot.on('chat', (username, message) => {
+        if (message === "/help" || message === "/помощь") {
+            bot.chat(`§6§l═══════════════════════════════════════════`);
+            bot.chat(`§6§l📜 ДОСТУПНЫЕ КОМАНДЫ:`);
+            bot.chat(`§6§l/help - Помощь`);
+            bot.chat(`§6§l/timeline - Временная шкала`);
+            bot.chat(`§6§l/sanity - Проверить психи
