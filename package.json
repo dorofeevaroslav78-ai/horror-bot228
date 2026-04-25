@@ -1,0 +1,11 @@
+{
+  "name": "horror-bot",
+  "version": "1.0.0",
+  "main": "bot.j",
+  "scripts": {
+    "start": "node bot.j"
+  },
+  "dependencies": {
+    "mineflayer": "^4.0.0"
+  }
+}
